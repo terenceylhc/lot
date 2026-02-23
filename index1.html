@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-TW" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>課堂抽籤樂</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { box-sizing: border-box; font-family: 'Noto Sans TC', sans-serif; }
+    @keyframes slot-spin { 0% { transform: translateY(0); } 100% { transform: translateY(-100%); } }
+    @keyframes glow-pulse { 0%, 100% { box-shadow: 0 0 20px rgba(255, 107, 107, 0.5); } 50% { box-shadow: 0 0 40px rgba(255, 107, 107, 0.8); } }
+    .slot-window { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border: 3px solid #ff6b6b; animation: glow-pulse 2s ease-in-out infinite; }
+    .neon-text { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; }
+    .glass-card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+    .confetti { position: fixed; width: 10px; height: 10px; animation: confetti-fall 3s ease-out forwards; z-index: 1000; }
+    @keyframes confetti-fall { 0% { transform: translateY(-100%) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+  </style>
+</head>
+<body class="h-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white overflow-hidden">
+
+  <div id="password-gate" class="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-4">
+    <div class="glass-card p-8 rounded-2xl w-full max-w-sm text-center border-2 border-pink-500/50 shadow-2xl">
+      <h2 class="text-2xl font-bold mb-6 text-pink-400">🔒 進入系統</h2>
+      <input type="password" id="entry-password" class="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-600 focus:border-pink-400 focus:outline-none mb-4 text-center text-xl text-white" placeholder="輸入密碼">
+      <button onclick="checkPassword()" class="w-full py-3 rounded-lg bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 font-bold"> 驗證登入 </button>
+      <p id="password-error" class="text-red-400 mt-4 text-sm hidden">密碼錯誤，請再試一次</p>
+    </div>
+  </div>
+
+  <div id="app" class="h-full w-full flex flex-col hidden">
+    <header class="p-6 text-center">
+      <h1 class="text-4xl font-black neon-text text-pink-400">🎰 課堂抽籤樂 🎰</h1>
+    </header>
+
+    <main class="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+      <div class="flex gap-8 text-center bg-white/5 p-4 rounded-xl border border-white/10">
+        <div>
+          <p class="text-slate-400 text-sm">總人數</p>
+          <p id="total-count" class="text-2xl font-bold text-pink-400">0</p>
+        </div>
+        <div>
+          <p class="text-slate-400 text-sm">已抽中</p>
+          <p id="drawn-count" class="text-2xl font-bold text-emerald-400">0</p>
+        </div>
+      </div>
+
+      <div class="slot-window rounded-3xl p-12 text-center w-full max-w-lg shadow-2xl">
+        <div id="slot-display" class="h-40 flex items-center justify-center overflow-hidden">
+          <span id="display-name" class="text-6xl font-black text-white tracking-widest">準備好嗎？</span>
+        </div>
+      </div>
+
+      <div id="winner-announcement" class="h-24 flex flex-col items-center justify-center opacity-0 transition-opacity duration-500">
+        <p class="text-2xl font-black text-yellow-400 neon-text">🎉 恭喜抽中 🎉</p>
+        <p id="winner-name" class="text-4xl font-black text-white mt-2"></p>
+      </div>
+
+      <div class="flex flex-col items-center gap-6">
+        <button onclick="startDraw()" id="draw-btn" class="px-20 py-8 rounded-full bg-gradient-to-r from-pink-500 via-red-500 to-orange-500 text-4xl font-black shadow-[0_0_30px_rgba(236,72,153,0.5)] transition-all hover:scale-105 active:scale-95 disabled:opacity-50">
+          🎲 開始抽籤
+        </button>
+
+        <div class="flex gap-6 items-center">
+          <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
+            <input type="checkbox" id="exclude-drawn" class="w-6 h-6 accent-pink-500" checked>
+            <span class="text-lg">不重複抽籤</span>
+          </label>
+          <button onclick="resetRaffle()" class="px-6 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm hover:bg-slate-700"> 🔄 重置進度 </button>
+        </div>
+      </div>
+    </main>
+    
+    <footer class="p-4 text-center text-slate-500 text-xs">
+      學生名單已固定於系統內，不受還原系統影響。
+    </footer>
+  </div>
+
+  <script>
+    // --- 【在這裡修改學生名單】 ---
+    const FIXED_STUDENTS = [
+      { seat: "1", name: "李澤" }, { seat: "2", name: "育瑞" }, { seat: "4", name: "羽庭" },
+      { seat: "5", name: "姵瑩" }, { seat: "6", name: "盈靜" }, { seat: "7", name: "秋序" },
+      { seat: "8", name: "昀蓁" }, { seat: "9", name: "孟儒" }, { seat: "10", name: "心睿" },
+      { seat: "11", name: "婉煣" }, { seat: "12", name: "觀靜" }, { seat: "13", name: "靖絜" },
+      { seat: "14", name: "郁涵" }, { seat: "15", name: "以昕" }, { seat: "16", name: "淑茵" },
+      { seat: "17", name: "千芊" }, { seat: "18", name: "姿莛" }, { seat: "19", name: "娜瑜" },
+      { seat: "20", name: "毓媛" }, { seat: "21", name: "曉琳" }, { seat: "22", name: "桂宥" },
+      { seat: "23", name: "芃瑋" }, { seat: "24", name: "紀璇" }, { seat: "25", name: "雅秀" },
+      { seat: "26", name: "意茵" }, { seat: "27", name: "千瑩" }, { seat: "28", name: "恩慈" },
+      { seat: "29", name: "家瑜" }, { seat: "30", name: "涵𦭳" }, { seat: "31", name: "蕎伊" },
+      { seat: "32", name: "翊帆" }, { seat: "33", name: "語芯" }
+    ];
+
+    // --- 程式邏輯 ---
+    let drawnSeats = []; // 這堂課已經抽中的座號 (存在記憶體，刷新即重置)
+    let isSpinning = false;
+
+    // 密碼驗證 (預設 1234)
+    function checkPassword() {
+      const input = document.getElementById('entry-password').value;
+      if (input === "8320260") {
+        document.getElementById('password-gate').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        updateStats();
+      } else {
+        document.getElementById('password-error').classList.remove('hidden');
+      }
+    }
+
+    function updateStats() {
+      document.getElementById('total-count').textContent = FIXED_STUDENTS.length;
+      document.getElementById('drawn-count').textContent = drawnSeats.length;
+    }
+
+    function startDraw() {
+      if (isSpinning) return;
+
+      const exclude = document.getElementById('exclude-drawn').checked;
+      let pool = exclude 
+        ? FIXED_STUDENTS.filter(s => !drawnSeats.includes(s.seat))
+        : FIXED_STUDENTS;
+
+      if (pool.length === 0) {
+        alert("所有學生都抽過囉！請按「重置進度」重新開始。");
+        return;
+      }
+
+      isSpinning = true;
+      document.getElementById('draw-btn').disabled = true;
+      document.getElementById('winner-announcement').style.opacity = "0";
+
+      let count = 0;
+      const totalSpins = 25;
+      
+      const interval = setInterval(() => {
+        const random = pool[Math.floor(Math.random() * pool.length)];
+        document.getElementById('display-name').textContent = random.name;
+        
+        count++;
+        if (count >= totalSpins) {
+          clearInterval(interval);
+          const winner = pool[Math.floor(Math.random() * pool.length)];
+          finishDraw(winner);
+        }
+      }, 80);
+    }
+
+    function finishDraw(winner) {
+      document.getElementById('display-name').textContent = winner.name;
+      document.getElementById('winner-name').textContent = `${winner.seat} 號 ${winner.name}`;
+      document.getElementById('winner-announcement').style.opacity = "1";
+      
+      // 記錄座號
+      if (!drawnSeats.includes(winner.seat)) {
+        drawnSeats.push(winner.seat);
+      }
+
+      updateStats();
+      isSpinning = false;
+      document.getElementById('draw-btn').disabled = false;
+      launchConfetti();
+    }
+
+    function resetRaffle() {
+      if (confirm("確定要清除已抽中的紀錄，重新開始嗎？")) {
+        drawnSeats = [];
+        updateStats();
+        document.getElementById('display-name').textContent = "準備好嗎？";
+        document.getElementById('winner-announcement').style.opacity = "0";
+      }
+    }
+
+    function launchConfetti() {
+      const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6bd6'];
+      for (let i = 0; i < 40; i++) {
+        const c = document.createElement('div');
+        c.className = 'confetti';
+        c.style.left = Math.random() * 100 + '%';
+        c.style.background = colors[Math.floor(Math.random() * colors.length)];
+        c.style.width = Math.random() * 8 + 5 + 'px';
+        c.style.height = c.style.width;
+        c.style.animationDelay = Math.random() * 0.5 + 's';
+        document.body.appendChild(c);
+        setTimeout(() => c.remove(), 3000);
+      }
+    }
+
+    // 監聽 Enter 鍵登入
+    document.getElementById('entry-password').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') checkPassword();
+    });
+  </script>
+</body>
+</html>
